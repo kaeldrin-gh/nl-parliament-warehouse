@@ -79,7 +79,7 @@ A BigQuery project without a billing account runs in sandbox mode. Tested on
 | Load jobs (append or truncate) | works |
 | `CREATE TABLE … AS SELECT`, views, window functions, `QUALIFY` | works |
 | `INSERT`, `UPDATE`, `MERGE` | refused: "DML queries are not allowed in the free tier" |
-| Table expiry | 60 days after creation; removing it is refused |
+| Table and partition expiry | 60 days after creation; removing it is refused |
 | Re-creating a table with `CREATE OR REPLACE TABLE … AS SELECT` | resets the expiry to 60 days from now |
 | Re-running a load with `WRITE_TRUNCATE` into one partition | replaces the partition, no duplicates |
 | GitHub Actions through Workload Identity Federation | works, with no key file |
@@ -157,7 +157,7 @@ sandbox cannot update rows. The current checkpoint is the newest row.
 | --- | --- |
 | No DML | Raw is append-only. History and "current version" are computed with window functions over the change log, not with dbt snapshots or `MERGE`. |
 | 60-day expiry | A renewal step re-creates any raw table older than 45 days with `CREATE OR REPLACE TABLE t AS SELECT * FROM t`. Marts are rebuilt every run, so they never age. |
-| 10 GiB lifetime storage | Staging and intermediate models are views, which store nothing. Only marts are tables, and each is small. Raw is lean: an estimated 200 MB for the whole scope. |
+| 10 GiB lifetime storage | Staging and intermediate models are views, which store nothing. Only marts are tables, and each is small. Raw is lean: the bootstrap wrote 314 MB for 1.2 million rows (3% of the quota). |
 | Quota visibility | Every job's written bytes are appended to `raw.storage_ledger`. Before writing, the loader sums the ledger and refuses to write above 8 GiB, leaving room for a controlled wind-down. |
 
 If the pipeline stops for more than 60 days, raw expires. The source is the

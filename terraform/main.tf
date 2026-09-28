@@ -1,6 +1,7 @@
 locals {
-  # The sandbox expires every table 60 days after creation and refuses to
-  # change that; stating it here keeps the plan honest about it.
+  # The sandbox expires every table and partition 60 days after creation and
+  # sets both defaults on new datasets itself; stating them here keeps the plan
+  # free of drift and honest about the limit.
   sixty_days_ms = 60 * 24 * 60 * 60 * 1000
 }
 
@@ -17,10 +18,11 @@ resource "google_project_service" "apis" {
 }
 
 resource "google_bigquery_dataset" "raw" {
-  dataset_id                  = "raw"
-  location                    = var.location
-  description                 = "Append-only change log from the Tweede Kamer SyncFeed and OData snapshots."
-  default_table_expiration_ms = local.sixty_days_ms
+  dataset_id                      = "raw"
+  location                        = var.location
+  description                     = "Append-only change log from the Tweede Kamer SyncFeed and OData snapshots."
+  default_table_expiration_ms     = local.sixty_days_ms
+  default_partition_expiration_ms = local.sixty_days_ms
 
   depends_on = [google_project_service.apis]
 }
