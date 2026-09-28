@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ingest.entities import BY_NAME, ENTITIES
 from ingest.loader import Loader
+from ingest.sample import load_sample
 from ingest.sink import BigQuerySink, DuckDBSink
 from ingest.source import TkApi
 
@@ -67,8 +68,16 @@ def main(argv=None) -> None:
         if name == "bootstrap":
             cmd.add_argument("--force", action="store_true", help="reload bootstrapped entities")
     sub.add_parser("renew", help="re-create raw tables before the 60-day expiry")
+    sub.add_parser("load-sample", help="load the committed one-day sample into DuckDB")
     args = parser.parse_args(argv)
 
+    if args.command == "load-sample":
+        sink = _sink()
+        if not isinstance(sink, DuckDBSink):
+            sys.exit("load-sample writes to DuckDB only; unset WAREHOUSE")
+        for table, rows in load_sample(sink).items():
+            print(f"{table}: {rows:,} rows")
+        return
     api = TkApi()
     if args.command == "head":
         print(api.head())

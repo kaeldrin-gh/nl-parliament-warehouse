@@ -1,0 +1,23 @@
+name: nl_parliament
+version: 0.1.0
+config-version: 2
+profile: nl_parliament
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+vars:
+  # The House elected on 17 March 2021 took office on 31 March 2021.
+  scope_start: "2021-03-31"
+
+# Everything here is a view: the BigQuery sandbox grants 10 GiB of lifetime
+# storage, and views store nothing (docs/design.md, Staying inside the sandbox).
+models:
+  nl_parliament:
+    staging:
+      +schema: staging
+      +materialized: view
+    core:
+      +schema: core
+      +materialized: view

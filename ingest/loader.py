@@ -206,6 +206,10 @@ class Loader:
                     total, rows, batches = total + len(rows), [], batches + 1
                 if last:
                     break
+            if total == 0:
+                # A heartbeat: without it, a quiet day (recess, weekend) and a
+                # stopped pipeline look the same to the freshness check.
+                self._checkpoint(entity, token, "idle", self._batch_id("feed", entity, 0))
             loaded[entity.name] = total
             self.log(f"{entity.name}: {total:,} changes, checkpoint {token:,}")
         return loaded

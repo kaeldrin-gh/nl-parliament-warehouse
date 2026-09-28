@@ -27,6 +27,22 @@ resource "google_bigquery_dataset" "raw" {
   depends_on = [google_project_service.apis]
 }
 
+# dbt writes only views here (docs/design.md, Staying inside the sandbox).
+resource "google_bigquery_dataset" "modeled" {
+  for_each = {
+    staging = "dbt staging views: the latest version of each entity, in English."
+    core    = "dbt dimensions, bridges and facts (views) with enforced contracts."
+  }
+
+  dataset_id                      = each.key
+  location                        = var.location
+  description                     = each.value
+  default_table_expiration_ms     = local.sixty_days_ms
+  default_partition_expiration_ms = local.sixty_days_ms
+
+  depends_on = [google_project_service.apis]
+}
+
 resource "google_service_account" "ingest" {
   account_id   = "nl-parliament-ingest"
   display_name = "nl-parliament-warehouse ingest (GitHub Actions)"
@@ -72,6 +88,14 @@ resource "google_project_iam_member" "ingest_jobs" {
 
 resource "google_bigquery_dataset_iam_member" "ingest_raw" {
   dataset_id = google_bigquery_dataset.raw.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.ingest.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "ingest_modeled" {
+  for_each = google_bigquery_dataset.modeled
+
+  dataset_id = each.value.dataset_id
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.ingest.email}"
 }

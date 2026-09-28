@@ -1,0 +1,321 @@
+version: 2
+
+# Types are ones DuckDB and BigQuery spell the same way (string, int64, bool,
+# date), so one contract holds on both engines.
+
+models:
+  - name: dim_term
+    description: "Parliamentary terms since the scope start. Grain: one term."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: term_id
+        description: "Year the term's election was held."
+        data_type: int64
+        tests: [unique, not_null]
+      - name: election_date
+        data_type: date
+      - name: installed_on
+        description: "Day the elected House took office."
+        data_type: date
+      - name: ended_on
+        description: "Last day of the term; empty for the current term."
+        data_type: date
+
+  - name: dim_date
+    description: "One row per calendar day from the scope start to a year ahead."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: date_day
+        data_type: date
+        tests: [unique, not_null]
+      - name: year
+        data_type: int64
+      - name: month
+        data_type: int64
+      - name: iso_year
+        data_type: int64
+      - name: iso_week
+        data_type: int64
+      - name: iso_day_of_week
+        description: "Monday 1 to Sunday 7."
+        data_type: int64
+      - name: is_weekend
+        data_type: bool
+      - name: term_id
+        description: "The term in office that day; empty after the latest installation's known end."
+        data_type: int64
+        tests:
+          - relationships: {arguments: {to: ref('dim_term'), field: term_id}}
+
+  - name: dim_party
+    description: "A parliamentary party (fractie). Grain: one party."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: party_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: abbreviation
+        data_type: string
+      - name: name_nl
+        data_type: string
+      - name: name_en
+        data_type: string
+      - name: seats_now
+        description: "Seats the party holds today, as the source reports it."
+        data_type: int64
+      - name: active_from
+        data_type: date
+      - name: active_until
+        data_type: date
+
+  - name: dim_member
+    description: >
+      A person who held a House seat, cast an individual vote or submitted a case
+      in the scope. Public-role fields only.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: member_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: member_number
+        data_type: int64
+      - name: display_name
+        description: "Name from the person record, or from the votes and cases that mention the person when the record is empty."
+        data_type: string
+        tests: [not_null]
+      - name: surname
+        data_type: string
+      - name: party_label_now
+        description: "The party label the source shows today, not at the time of a vote; use bridge_party_membership for history."
+        data_type: string
+      - name: current_role
+        data_type: string
+      - name: has_source_profile
+        description: "False when the source's person record arrives with every field empty."
+        data_type: bool
+        tests: [not_null]
+
+  - name: bridge_party_membership
+    description: >
+      A member occupying a seat of a party from valid_from until valid_until.
+      Grain: one seat assignment. The intervals come from the source (valid
+      time); the change log records when the source changed them.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: assignment_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: member_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_member'), field: member_id}}
+      - name: party_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_party'), field: party_id}}
+      - name: seat_role
+        data_type: string
+      - name: valid_from
+        data_type: date
+        tests: [not_null]
+      - name: valid_until
+        description: "Last day in the seat; empty while the member still holds it."
+        data_type: date
+
+  - name: dim_case
+    description: "A case: motion, amendment, bill, letter and more. Grain: one case."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: case_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: number
+        data_type: string
+      - name: case_type_nl
+        data_type: string
+      - name: case_type
+        data_type: string
+        tests:
+          - accepted_values:
+              arguments:
+                values: [motion, amendment, bill, private_member_bill, budget, other]
+      - name: title
+        data_type: string
+      - name: subject
+        data_type: string
+      - name: status
+        data_type: string
+      - name: started_on
+        data_type: date
+      - name: parliamentary_year
+        data_type: string
+      - name: is_closed
+        data_type: bool
+      - name: current_stage
+        data_type: string
+
+  - name: dim_decision
+    description: "A decision on an agenda item, dated by its sitting. Grain: one decision."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: decision_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: agenda_item_id
+        data_type: string
+        tests: [not_null]
+      - name: sitting_id
+        data_type: string
+        tests: [not_null]
+      - name: decided_on
+        description: "Date of the sitting in Amsterdam time."
+        data_type: date
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_date'), field: date_day}}
+      - name: parliamentary_year
+        data_type: string
+      - name: vote_method
+        data_type: string
+        tests:
+          - accepted_values: {arguments: {values: [show_of_hands, roll_call, without_vote]}}
+      - name: decision_type_nl
+        data_type: string
+      - name: outcome
+        description: "accepted or rejected for decisions that were put to a vote; empty otherwise."
+        data_type: string
+        tests:
+          - accepted_values: {arguments: {values: [accepted, rejected]}}
+      - name: decision_text
+        data_type: string
+      - name: status
+        data_type: string
+
+  - name: bridge_decision_case
+    description: "Which cases a decision is about. Grain: one decision and one case."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: decision_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_decision'), field: decision_id}}
+      - name: case_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_case'), field: case_id}}
+
+  - name: bridge_case_submitter
+    description: "Who submitted or co-signed a case. Grain: one case actor."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: case_actor_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: case_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_case'), field: case_id}}
+      - name: member_id
+        data_type: string
+        tests:
+          - relationships: {arguments: {to: ref('dim_member'), field: member_id}}
+      - name: party_id
+        data_type: string
+        tests:
+          - relationships: {arguments: {to: ref('dim_party'), field: party_id}}
+      - name: actor_name
+        data_type: string
+      - name: actor_party
+        data_type: string
+      - name: relation
+        data_type: string
+        tests:
+          - not_null
+          - accepted_values: {arguments: {values: [submitter, co_submitter]}}
+
+  - name: fct_party_vote
+    description: "One party's vote on one decision. Grain: one party and one decision."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: vote_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: decision_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_decision'), field: decision_id}}
+      - name: party_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_party'), field: party_id}}
+      - name: decided_on
+        data_type: date
+        tests: [not_null]
+      - name: vote
+        data_type: string
+        tests:
+          - not_null
+          - accepted_values: {arguments: {values: [for, against, not_voted]}}
+      - name: party_size
+        description: "Seats the party held at the vote."
+        data_type: int64
+        tests: [not_null]
+      - name: is_mistake
+        description: "The party declared afterwards that this vote was a mistake (vergissing)."
+        data_type: bool
+
+  - name: fct_member_vote
+    description: "One member's vote in a roll call. Grain: one member and one decision."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: vote_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: decision_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_decision'), field: decision_id}}
+      - name: member_id
+        data_type: string
+        tests:
+          - not_null
+          - relationships: {arguments: {to: ref('dim_member'), field: member_id}}
+      - name: party_id
+        description: "The party recorded on the vote."
+        data_type: string
+        tests:
+          - relationships: {arguments: {to: ref('dim_party'), field: party_id}}
+      - name: seat_party_id
+        description: "The party whose seat the member held on the day; empty when the source has no seat history for the member."
+        data_type: string
+        tests:
+          - relationships: {arguments: {to: ref('dim_party'), field: party_id}}
+      - name: decided_on
+        data_type: date
+        tests: [not_null]
+      - name: vote
+        data_type: string
+        tests:
+          - not_null
+          - accepted_values: {arguments: {values: [for, against, not_voted]}}
+      - name: is_mistake
+        data_type: bool

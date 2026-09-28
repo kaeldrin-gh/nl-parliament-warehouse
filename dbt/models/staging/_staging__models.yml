@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: stg_tk__votes
+    description: "Latest version of each vote (stemming), without deleted votes."
+    columns:
+      - name: vote_id
+        tests: [unique, not_null]
+      - name: vote
+        description: "for, against or not_voted, from the Dutch Voor, Tegen, Niet deelgenomen."
+        tests: [not_null]
+  - name: stg_tk__decisions
+    columns:
+      - name: decision_id
+        tests: [unique, not_null]
+  - name: stg_tk__agenda_items
+    columns:
+      - name: agenda_item_id
+        tests: [unique, not_null]
+  - name: stg_tk__sittings
+    columns:
+      - name: sitting_id
+        tests: [unique, not_null]
+  - name: stg_tk__cases
+    columns:
+      - name: case_id
+        tests: [unique, not_null]
+  - name: stg_tk__case_actors
+    columns:
+      - name: case_actor_id
+        tests: [unique, not_null]
+  - name: stg_tk__members
+    columns:
+      - name: member_id
+        tests: [unique, not_null]
+  - name: stg_tk__parties
+    columns:
+      - name: party_id
+        tests: [unique, not_null]
+  - name: stg_tk__party_seats
+    columns:
+      - name: seat_id
+        tests: [unique, not_null]
+  - name: stg_tk__seat_assignments
+    columns:
+      - name: assignment_id
+        tests: [unique, not_null]
+
+unit_tests:
+  - name: latest_version_wins_and_deletions_disappear
+    description: >
+      The change log's rules (docs/design.md, Ingestion): the newest source
+      version wins; a tombstone removes the entity; on a tie a feed row beats a
+      snapshot row; a replayed batch counts once.
+    model: stg_tk__votes
+    given:
+      - input: source('raw', 'stemming_changes')
+        rows:
+          # a: updated after the snapshot
+          - {id: a, deleted: false, source_updated: "2026-09-01 10:00:00+00", resume_token: null, loaded_at: "2026-09-28 06:00:00+00", soort: Voor}
+          - {id: a, deleted: false, source_updated: "2026-09-02 10:00:00+00", resume_token: 101, loaded_at: "2026-09-29 04:30:00+00", soort: Tegen}
+          # b: deleted after the snapshot
+          - {id: b, deleted: false, source_updated: "2026-09-01 10:00:00+00", resume_token: null, loaded_at: "2026-09-28 06:00:00+00", soort: Voor}
+          - {id: b, deleted: true, source_updated: "2026-09-03 10:00:00+00", resume_token: 102, loaded_at: "2026-09-29 04:30:00+00", soort: null}
+          # c: same version in the snapshot and the feed
+          - {id: c, deleted: false, source_updated: "2026-09-02 10:00:00+00", resume_token: null, loaded_at: "2026-09-28 06:00:00+00", soort: Voor, actor_naam: from snapshot}
+          - {id: c, deleted: false, source_updated: "2026-09-02 10:00:00+00", resume_token: 103, loaded_at: "2026-09-29 04:30:00+00", soort: Voor, actor_naam: from feed}
+          # d: a batch replayed after a crash
+          - {id: d, deleted: false, source_updated: "2026-09-02 10:00:00+00", resume_token: 104, loaded_at: "2026-09-29 04:30:00+00", soort: Niet deelgenomen}
+          - {id: d, deleted: false, source_updated: "2026-09-02 10:00:00+00", resume_token: 104, loaded_at: "2026-09-29 04:31:00+00", soort: Niet deelgenomen}
+    expect:
+      rows:
+        - {vote_id: a, vote: against, actor_name: null}
+        - {vote_id: c, vote: for, actor_name: from feed}
+        - {vote_id: d, vote: not_voted, actor_name: null}

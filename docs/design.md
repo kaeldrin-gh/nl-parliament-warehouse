@@ -1,7 +1,7 @@
 # Design: nl-parliament-warehouse
 
-Status: 28 September 2026. Milestones M0 (repository setup) and M1 (the
-loader and its infrastructure) are done; M2 onward is planned.
+Status: 28 September 2026. Milestones M0 (repository setup), M1 (the loader
+and its infrastructure) and M2 (the dbt model) are done; M3 onward is planned.
 
 ## Objective
 
@@ -157,43 +157,58 @@ sandbox cannot update rows. The current checkpoint is the newest row.
 | --- | --- |
 | No DML | Raw is append-only. History and "current version" are computed with window functions over the change log, not with dbt snapshots or `MERGE`. |
 | 60-day expiry | A renewal step re-creates any raw table older than 45 days with `CREATE OR REPLACE TABLE t AS SELECT * FROM t`. Marts are rebuilt every run, so they never age. |
-| 10 GiB lifetime storage | Staging and intermediate models are views, which store nothing. Only marts are tables, and each is small. Raw is lean: the bootstrap wrote 314 MB for 1.2 million rows (3% of the quota). |
+| 10 GiB lifetime storage | Staging and core models are views, which store nothing. Only marts (M3) will be tables, and each is small. Raw is lean: the bootstrap wrote 314 MB for 1.2 million rows (3% of the quota). |
+| 1 TiB of queries a month | A full `dbt build` on BigQuery (the models plus 110 tests) scans 4.3 GB in 161 queries; run daily, that is about 130 GB a month. |
 | Quota visibility | Every job's written bytes are appended to `raw.storage_ledger`. Before writing, the loader sums the ledger and refuses to write above 8 GiB, leaving room for a controlled wind-down. |
 
 If the pipeline stops for more than 60 days, raw expires. The source is the
-system of record, so the recovery path is a fresh bootstrap, and it gets a
-test run before M1 counts as done.
+system of record, so the recovery path is a fresh bootstrap; it was tested on
+BigQuery by removing a table (see [operations.md](operations.md)). A quiet run
+still appends an `idle` checkpoint row, so `dbt source freshness` can tell a
+quiet day from a stopped pipeline.
 
 ### Transformation
 
-dbt with the BigQuery adapter. CI also builds the same project on DuckDB from
-fixture data, so pull requests are tested without cloud credentials; the
-scheduled run builds on BigQuery.
+dbt with the BigQuery adapter. CI builds the same project on DuckDB from one
+real voting day committed as fixtures (`scripts/make_sample.py`, 6,502 raw
+rows), so pull requests are tested without cloud credentials; the daily run
+builds and tests on BigQuery with the full data. The few differences between
+the two SQL dialects live in `dbt/macros/cross_db.sql`, and contracts use the
+type names both engines share (`string`, `int64`, `bool`, `date`).
 
-Staging (views) keeps the newest version of each entity and drops tombstoned
-ids:
+Staging views rename the Dutch fields to English and keep the newest version
+of each entity, without deleted ones (`dbt/macros/latest_versions.sql`):
 
 ```sql
 select *
-from {{ source('raw', 'stemming_changes') }}
-qualify row_number() over (
-    partition by id order by source_updated desc, resume_token desc nulls last
-) = 1
+from (
+    select *, row_number() over (
+        partition by id
+        order by source_updated desc, resume_token desc nulls last, loaded_at desc
+    ) as version_rank
+    from {{ source('raw', 'stemming_changes') }}
+) as versions
+where version_rank = 1 and not deleted
 ```
+
+A dbt unit test feeds this rule an update, a deletion, a snapshot/feed tie
+and a replayed batch.
 
 ### Dimensional model
 
 | Model | Grain | Notes |
 | --- | --- | --- |
-| `dim_member` | one member | Public-role columns only. |
-| `dim_party` | one party | Name, abbreviation, active dates. |
-| `dim_date` | one date | Calendar, parliamentary year, term. |
+| `dim_member` | one member | Public-role columns only. Names fall back to the votes and cases when the source's person record is empty ([data-quality.md](data-quality.md), DQ-2). |
+| `dim_party` | one party record | Name, abbreviation, active dates. |
+| `dim_term` | one parliamentary term | Election and installation dates; the installations match the seat data. |
+| `dim_date` | one date | Calendar, ISO week, term. |
 | `dim_case` | one case (motion, bill, amendment) | Type, title, status. |
 | `dim_decision` | one decision | Joined to agenda item and sitting for the decision date. |
 | `bridge_party_membership` | one member in one party for one interval | From `FractieZetelPersoon` `Van` / `TotEnMet`. |
 | `bridge_case_submitter` | one member or party submitting or co-signing one case | From `ZaakActor` with a submitter relation. |
 | `fct_party_vote` | one party's vote on one decision | For, against, or not taking part; party seats at the time; the mistake flag (`Vergissing`). |
-| `fct_member_vote` | one member's vote on one roll-call decision | Only when individual votes were recorded (`Persoon_Id` set). |
+| `bridge_decision_case` | one decision and one case | From the decision's case links. |
+| `fct_member_vote` | one member's vote on one roll-call decision | Only when individual votes were recorded (`Persoon_Id` set). `seat_party_id` is the party whose seat the member held that day ([data-quality.md](data-quality.md), DQ-1). |
 
 Membership has two timelines, and the model keeps both:
 
@@ -224,8 +239,11 @@ Each mart states its definition in the model's YAML and on the report page:
   details (`PersoonGeschenk`, `PersoonReis`, `PersoonNevenfunctie`,
   `PersoonContactinformatie`). A unit test fails if a landing schema contains a
   column outside its allowlist.
-- **Contracts and tests.** Facts and marts are contract-enforced; tests cover
-  keys, relationships and accepted values (for example, vote types).
+- **Contracts and tests.** Every core model is contract-enforced; 110 checks
+  cover keys, relationships, accepted values, House-size limits (at most
+  150 seats behind a decision's votes) and the change-log rules. Source
+  problems that the data really has warn instead of failing, and each is
+  written up in [data-quality.md](data-quality.md).
 - **Lineage and docs.** dbt docs with column descriptions, published to GitHub
   Pages.
 - **Access.** GitHub Actions authenticates through Workload Identity
@@ -248,7 +266,8 @@ in the other repositories.
   output.
 - **Bootstrap overlap test:** a snapshot row and a later feed row for the same
   id resolve to the feed row.
-- **dbt tests** on DuckDB in CI and on BigQuery in the scheduled run.
+- **dbt tests and a dbt unit test** on DuckDB in CI (one real day) and on
+  BigQuery in the daily run (all data).
 - **Allowlist test** for personal data.
 
 ## Milestones
@@ -257,7 +276,7 @@ in the other repositories.
 | --- | --- |
 | M0 | Repository, CI, the feed parser and its tests, this document. Done. |
 | M1 | Loader: bootstrap, daily change run, checkpoints, storage ledger, renewal, recovery test. Terraform for the datasets and the identity provider. Done. |
-| M2 | dbt staging, dimensions, facts, contracts and tests on DuckDB and BigQuery. |
+| M2 | dbt staging, dimensions, facts, contracts and tests on DuckDB and BigQuery. Done. |
 | M3 | Marts, the GitHub Pages report, README, and making the repository public. |
 | M4 (optional) | Documents: text extraction, local embeddings, similar-motion search with a retrieval test set. |
 | M5 (optional) | Bundestag DIP API as a German counterpart. |

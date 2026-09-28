@@ -43,6 +43,29 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q
 
+  # The dbt project on DuckDB, from one real voting day committed as fixtures
+  # (scripts/make_sample.py), so pull requests need no cloud credentials.
+  dbt:
+    runs-on: ubuntu-latest
+    env:
+      DUCKDB_PATH: /tmp/sample.duckdb
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dbt]"
+
+      - name: Load the one-day sample
+        run: python -m ingest.cli load-sample
+
+      - name: dbt build (models, contracts, data tests, unit tests)
+        run: dbt build --project-dir dbt --profiles-dir dbt
+
   terraform:
     runs-on: ubuntu-latest
     defaults:

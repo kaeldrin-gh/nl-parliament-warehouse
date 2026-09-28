@@ -120,6 +120,9 @@ def test_a_second_run_without_new_changes_writes_nothing():
 
     assert loader.run_changes([STEMMING]) == {"Stemming": 0}
     assert sink.query("select count(*) from raw.stemming_changes") == before
+    # The quiet run still leaves a heartbeat at the same position.
+    assert sink.query("select resume_token from raw.checkpoints where mode = 'idle'") == [(101,)]
+    assert loader.checkpoints() == {"Stemming": 101}
 
 
 def test_a_crash_between_rows_and_checkpoint_rereads_without_changing_the_result():

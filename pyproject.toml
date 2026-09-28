@@ -14,7 +14,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-bigquery = ["google-cloud-bigquery>=3.25"]
+dbt = ["dbt-duckdb>=1.9"]
+bigquery = ["google-cloud-bigquery>=3.25", "dbt-bigquery>=1.9"]
 test = ["pytest>=8.0"]
 
 [tool.setuptools]

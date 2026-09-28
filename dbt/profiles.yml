@@ -1,0 +1,21 @@
+nl_parliament:
+  target: "{{ env_var('DBT_TARGET', 'duckdb') }}"
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'warehouse/raw.duckdb') }}"
+      threads: 4
+      settings:
+        TimeZone: UTC
+
+    # Authenticates with application-default credentials: `gcloud auth
+    # application-default login` locally, Workload Identity Federation in CI.
+    bigquery:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT', 'project-510017') }}"
+      dataset: core
+      location: EU
+      threads: 4
+      job_execution_timeout_seconds: 300
+      priority: interactive

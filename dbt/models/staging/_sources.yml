@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Append-only change log written by `ingest/` from the Tweede Kamer SyncFeed
+      and OData snapshots. Every row is one version of one entity; `deleted`
+      marks a tombstone.
+    schema: raw
+    tables:
+      - name: stemming_changes
+        description: One party's or one member's vote on one decision.
+      - name: besluit_changes
+        description: A decision on an agenda item.
+      - name: agendapunt_changes
+        description: An agenda item of a sitting.
+      - name: activiteit_changes
+        description: A sitting, debate or meeting, with its date.
+      - name: zaak_changes
+        description: A case such as a motion, amendment or bill.
+      - name: zaak_actor_changes
+        description: A person, party or committee linked to a case, and how.
+      - name: persoon_changes
+        description: A person, public-role fields only.
+      - name: fractie_changes
+        description: A parliamentary party.
+      - name: fractie_zetel_changes
+        description: One seat of a party.
+      - name: fractie_zetel_persoon_changes
+        description: A member occupying a party seat from `van` until `tot_en_met`.
+      - name: checkpoints
+        description: >
+          The loader's feed position per entity, appended on every run, including
+          runs without changes, so its newest row shows when the pipeline last ran.
+        loaded_at_field: recorded_at
+        freshness:
+          warn_after: {count: 30, period: hour}
+          error_after: {count: 54, period: hour}
