@@ -26,8 +26,8 @@ votes.
   a party record that was no longer active. Today it lists exactly these
   4,338 votes; a new party with the same problem would show up here too.
 
-Party-level analysis (M3) has to treat the two records as one party, and the
-report will say so.
+The marts key parties by abbreviation (`int_party_votes_keyed`), so the two
+records count as one party, and the report says so in its notes.
 
 ## DQ-2: A third of person records are empty
 

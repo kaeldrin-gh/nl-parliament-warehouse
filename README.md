@@ -33,17 +33,20 @@ Companion projects on European power markets:
 ## Architecture
 
 ```mermaid
-flowchart LR
-    F["SyncFeed (changes)"] -->|"daily, from checkpoint"| L["ingest/ (Python)"]
-    O["OData (snapshot)"] -->|"one-off bootstrap"| L
+flowchart TB
+    subgraph source["Tweede Kamer open data (CC0, no key)"]
+        F["SyncFeed: every change"]
+        O["OData: snapshot"]
+    end
+    F -->|"daily, from the checkpoint"| L["ingest/ (Python)"]
+    O -->|"one-off bootstrap"| L
     L -->|"load jobs, append-only"| R[("BigQuery raw: change log")]
-    R --> S["dbt staging (views)"]
-    S --> C["dbt core: dims, bridges, facts (views)"]
-    C --> M[("dbt marts (tables)")]
-    M --> P["GitHub Pages report"]
-    A["GitHub Actions (daily)"] -.runs.-> L
-    A -.runs.-> S
-    T["Terraform"] -.datasets, keyless access.-> R
+    R --> S["dbt staging: latest version of each entity (views)"]
+    S --> C["dbt core: dimensions, bridges, facts (views)"]
+    C --> M[("dbt marts: small tables")]
+    M --> P["GitHub Pages: report and dbt docs"]
+    A["GitHub Actions, daily"] -. runs .-> L
+    T["Terraform"] -. "datasets, keyless access" .-> R
 ```
 
 - **Change capture from a public source.** The Tweede Kamer SyncFeed republishes
@@ -60,7 +63,7 @@ flowchart LR
   data load and every dbt table in a storage ledger, refusing to write past
   8 GiB. The whole raw layer is 314 MB.
 - **A dimensional model with history.** Staging and core are views, so they
-  store nothing. Every core model and mart has an enforced contract; 104 data
+  store nothing. Every core model and mart has an enforced contract; 108 data
   tests and a unit test cover keys, relationships, House-size limits and the
   change-log rules.
 - **Personal data stays at the source.** Each entity is an allowlist in

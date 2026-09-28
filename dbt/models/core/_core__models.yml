@@ -319,3 +319,32 @@ models:
           - accepted_values: {arguments: {values: [for, against, not_voted]}}
       - name: is_mistake
         data_type: bool
+
+  - name: int_party_votes_keyed
+    description: >
+      Party votes keyed by party abbreviation instead of party record, with term
+      and month, for the marts. Merges the two 50PLUS records (DQ-1). Grain: one
+      party vote.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: vote_id
+        data_type: string
+        tests: [unique, not_null]
+      - name: decision_id
+        data_type: string
+      - name: term_id
+        data_type: int64
+        tests: [not_null]
+      - name: month_start
+        data_type: date
+      - name: party
+        description: "Party abbreviation, or the name when the record has none."
+        data_type: string
+        tests: [not_null]
+      - name: vote
+        data_type: string
+      - name: party_size
+        data_type: int64
+      - name: is_mistake
+        data_type: bool

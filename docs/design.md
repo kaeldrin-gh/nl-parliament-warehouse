@@ -159,7 +159,7 @@ sandbox cannot update rows. The current checkpoint is the newest row.
 | No DML | Raw is append-only. History and "current version" are computed with window functions over the change log, not with dbt snapshots or `MERGE`. |
 | 60-day expiry | A renewal step re-creates any raw table older than 45 days with `CREATE OR REPLACE TABLE t AS SELECT * FROM t`. Marts are rebuilt every run, so they never age. |
 | 10 GiB lifetime storage | Staging and core models are views, which store nothing. Only the marts are tables: about 0.5 MB, rebuilt daily. Raw is lean: the bootstrap wrote 314 MB for 1.2 million rows (3% of the quota). |
-| 1 TiB of queries a month | A full `dbt build` on BigQuery (27 models, 104 data tests and a unit test) scans 4.3 GB in about 160 queries; run daily, that is about 130 GB a month. |
+| 1 TiB of queries a month | A full `dbt build` on BigQuery (27 models, 108 data tests and a unit test) scans 4.3 GB in about 160 queries; run daily, that is about 130 GB a month. |
 | Quota visibility | Every job's written bytes are appended to `raw.storage_ledger`. Before writing, the loader sums the ledger and refuses to write above 8 GiB, leaving room for a controlled wind-down. |
 
 If the pipeline stops for more than 60 days, raw expires. The source is the
@@ -247,7 +247,7 @@ Each mart states its definition in its YAML and on the report page:
   details (`PersoonGeschenk`, `PersoonReis`, `PersoonNevenfunctie`,
   `PersoonContactinformatie`). A unit test fails if a landing schema contains a
   column outside its allowlist.
-- **Contracts and tests.** Every core model and mart is contract-enforced. 104
+- **Contracts and tests.** Every core model and mart is contract-enforced. 108
   data tests and a unit test cover keys, relationships, accepted values,
   House-size limits (at most 150 seats behind a decision's votes) and the
   change-log rules. Source
@@ -316,8 +316,10 @@ in the other repositories.
   date, so it also brings changes to out-of-scope entities; staging filters
   those out.
 - **Roll-call coverage.** Individual votes exist only for roll-call decisions,
-  so `fct_member_vote` is sparse by nature and the report says so.
-- **Party splits and renames.** Handled through `dim_party` active dates; the
-  agreement mart compares parties as they existed at the time of each vote.
+  so `fct_member_vote` is sparse by nature; the report counts roll calls
+  separately from party votes.
+- **Party splits and renames.** The marts key parties by abbreviation, which
+  merges two records of one party (50PLUS) but keeps a renamed party under
+  each name (GroenLinks-PvdA and PRO in the 2025 term); the report notes both.
 - **Neutrality.** The report shows definitions next to every number and makes
   no rankings.

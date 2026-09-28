@@ -64,11 +64,10 @@ python scripts/make_sample.py --day 2026-06-02
 
 ## Infrastructure
 
-`terraform/` creates the `raw`, `staging` and `core` datasets, the ingest
-service account and the
-Workload Identity Federation provider that lets this repository's workflows
-act as that account without a key. State is local, because the usual remote
-backend (Cloud Storage) needs a billing account:
+`terraform/` creates the `raw`, `staging`, `core` and `marts` datasets, the
+ingest service account and the Workload Identity Federation provider that lets
+this repository's workflows act as that account without a key. State is local,
+because the usual remote backend (Cloud Storage) needs a billing account:
 
 ```bash
 cd terraform
@@ -80,9 +79,9 @@ terraform apply
 
 The `ingest` workflow runs at 04:30 UTC: `changes`, `renew`, `check-budget`,
 `dbt build` on BigQuery, `record-tables marts`, the report and dbt docs, then
-`status` into the run summary. A second job deploys the site to GitHub Pages. A failed run opens one GitHub
-issue labeled `ingest-failure`; later failures stay red without opening
-duplicates.
+`status` into the run summary. A second job deploys the site to GitHub Pages.
+A failed run opens one GitHub issue labeled `ingest-failure`; later failures
+stay red without opening duplicates.
 
 GitHub disables scheduled workflows in a public repository after 60 days
 without activity, which is also when the sandbox expires raw tables. If the
