@@ -43,7 +43,7 @@ class DuckDBSink:
         self.conn.execute(f"create schema if not exists {schema}")
         # DuckDB keeps no creation time, which renewal needs, so track it here.
         self.conn.execute(
-            f"create table if not exists {schema}.__created (name varchar, created timestamptz)"
+            f"create table if not exists {schema}.__created (name varchar, created_utc timestamp)"
         )
 
     def ref(self, table: str) -> str:
@@ -87,8 +87,13 @@ class DuckDBSink:
         return int(size)
 
     def tables(self) -> dict[str, datetime]:
-        rows = self.conn.execute(f"select name, created from {self.schema}.__created").fetchall()
-        return {name: created for name, created in rows if self.table_exists(name)}
+        # Naive UTC in, aware UTC out: reading TIMESTAMPTZ back needs pytz.
+        rows = self.conn.execute(
+            f"select name, created_utc from {self.schema}.__created"
+        ).fetchall()
+        return {
+            name: created.replace(tzinfo=UTC) for name, created in rows if self.table_exists(name)
+        }
 
     def query(self, sql: str) -> list[tuple]:
         return self.conn.execute(sql).fetchall()
@@ -104,9 +109,8 @@ class DuckDBSink:
     def _stamp(self, table: str, created: datetime | None = None) -> None:
         # Bookkeeping for the stand-in, not warehouse data, so replacing is fine.
         self.conn.execute(f"delete from {self.schema}.__created where name = ?", [table])
-        self.conn.execute(
-            f"insert into {self.schema}.__created values (?, ?)", [table, created or self.clock()]
-        )
+        moment = (created or self.clock()).astimezone(UTC).replace(tzinfo=None)
+        self.conn.execute(f"insert into {self.schema}.__created values (?, ?)", [table, moment])
 
 
 class BigQuerySink:
