@@ -1,0 +1,18 @@
+{
+ "Id": "19aa93ac-2300-4845-86ac-fc7cffc0cbb3",
+ "Agendapunt_Id": "4db5b95f-eda3-46be-afa9-91e720642e3a",
+ "StemmingsSoort": null,
+ "BesluitSoort": null,
+ "BesluitTekst": null,
+ "Opmerking": null,
+ "Status": "Voorstel",
+ "AgendapuntZaakBesluitVolgorde": 1,
+ "GewijzigdOp": "2026-09-10T13:40:40.903+02:00",
+ "ApiGewijzigdOp": "2026-09-10T11:40:49.0402723Z",
+ "Verwijderd": false,
+ "Zaak": [
+  {
+   "Id": "19214682-5078-4587-801f-dcd3d666a273"
+  }
+ ]
+}

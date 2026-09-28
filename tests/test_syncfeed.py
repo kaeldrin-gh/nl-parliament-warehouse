@@ -25,6 +25,7 @@ def test_a_tombstone_carries_identity_but_no_fields(page):
 
     assert tombstone.id == "45d46c2d-aece-47b0-8358-523f5a56c1ee"
     assert tombstone.fields == {}
+    assert tombstone.refs == {}
     assert tombstone.resume_token == 3547906
 
 
@@ -36,8 +37,8 @@ def test_a_live_vote_keeps_values_references_and_nulls(page):
     assert vote.fields["actorFractie"] == "PVV"
     assert vote.fields["fractieGrootte"] == "9"
     assert vote.fields["vergissing"] == "false"
-    assert vote.fields["besluit_id"] == "643f76ba-2d42-4d6f-b903-d71b0927144a"
-    assert vote.fields["fractie_id"] == "65129918-f256-4975-9da4-488da34d6695"
+    assert vote.refs["besluit"] == ["643f76ba-2d42-4d6f-b903-d71b0927144a"]
+    assert vote.refs["fractie"] == ["65129918-f256-4975-9da4-488da34d6695"]
     assert vote.fields["sidActorLid"] is None
     assert vote.source_updated == "2008-11-12T14:40:12.1730000"
 
@@ -51,6 +52,20 @@ def test_resume_tokens_only_move_forward(page):
 
 def test_page_points_to_the_next_page(page):
     assert page.next_token == 3560496
+
+
+def test_a_repeated_reference_keeps_every_link():
+    feed = """<feed xmlns="http://www.w3.org/2005/Atom"
+        xmlns:tk="http://www.tweedekamer.nl/xsd/tkData/v1-0"><entry>
+      <updated>2026-09-21T15:42:01Z</updated>
+      <link rel="next" href="https://x/Feed?skiptoken=7&amp;category=Besluit" />
+      <content type="application/xml"><tk:besluit id="b1" tk:bijgewerkt="2026-09-21T17:41:57"
+          tk:verwijderd="false"><tk:zaak ref="z1" /><tk:zaak ref="z2" /></tk:besluit></content>
+    </entry></feed>"""
+
+    (change,) = parse_page(feed).changes
+
+    assert change.refs == {"zaak": ["z1", "z2"]}
 
 
 def test_the_end_of_the_feed_is_an_empty_page_without_a_next_link():

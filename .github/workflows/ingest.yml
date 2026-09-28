@@ -1,0 +1,72 @@
+name: ingest
+
+# Daily: read the change feed from each checkpoint into BigQuery, then renew
+# raw tables that near the sandbox's 60-day expiry.
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+env:
+  WAREHOUSE: bigquery
+  GCP_PROJECT: project-510017
+  BQ_LOCATION: EU
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/615055552430/locations/global/workloadIdentityPools/github-actions/providers/nl-parliament-warehouse
+          service_account: nl-parliament-ingest@project-510017.iam.gserviceaccount.com
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[bigquery]"
+
+      - name: Read changes since the last checkpoint
+        run: python -m ingest.cli changes
+
+      - name: Renew tables near expiry
+        run: python -m ingest.cli renew
+
+      - name: Status
+        if: always()
+        run: python -m ingest.cli status >> "$GITHUB_STEP_SUMMARY"
+
+      # Alerting: one issue per incident; while it is open, later failures
+      # stay red without opening duplicates.
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create ingest-failure --color B60205 \
+            --description "A scheduled ingest run failed" --force || true
+          open_count=$(gh issue list --repo "$GITHUB_REPOSITORY" \
+            --label ingest-failure --state open --json number --jq 'length')
+          if [ "$open_count" -gt 0 ]; then
+            echo "an open ingest-failure issue exists; not creating another"
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --label ingest-failure \
+            --title "Scheduled ingest failed ($(date -u +%Y-%m-%d))" \
+            --body "The scheduled ingest run failed. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID - see docs/operations.md."

@@ -1,7 +1,7 @@
 # Design: nl-parliament-warehouse
 
-Status: draft, 28 September 2026. Milestone M0 (repository setup) is done;
-everything else in this document is planned.
+Status: 28 September 2026. Milestones M0 (repository setup) and M1 (the
+loader and its infrastructure) are done; M2 onward is planned.
 
 ## Objective
 
@@ -112,13 +112,16 @@ flowchart LR
 The loader has two modes. They follow the usual CDC bootstrap: record the log
 position first, take the snapshot, then replay the log from that position.
 
-1. **Bootstrap (once).** Find the feed head by bisection on `skiptoken`, which
-   takes about 25 requests, and store it as the first checkpoint. Then page
-   through OData for each entity inside the scope. Changes that happen during
+1. **Bootstrap (once).** Find the feed head: the smallest `skiptoken` with no
+   change after it, by bisection on the unfiltered feed (about 50 requests,
+   10 seconds). Then page through OData for each entity inside the scope and
+   store the head as the entity's first checkpoint. Changes that happen during
    the snapshot are read again by the feed; the staging layer removes the
-   overlap.
+   overlap. OData requests use `$select`, so only allowlisted columns ever
+   leave the source.
 2. **Daily change run.** For each entity, read the SyncFeed from its latest
-   checkpoint until an empty page, in batches of 20 pages (5,000 changes).
+   checkpoint until a page holds fewer than 250 changes, in batches of 20 pages
+   (5,000 changes).
 
 Each batch is written in this order:
 
@@ -126,8 +129,18 @@ Each batch is written in this order:
 2. Append one row to `raw.checkpoints` with the batch's last `resume_token`.
 
 A crash between the two steps makes the next run read the batch again. The
-duplicate rows have the same `(id, api_updated)` and staging drops them, so
-the pipeline is at-least-once on write and exactly-once in effect.
+duplicate rows have the same `(id, source_updated)` and staging drops them,
+so the pipeline is at-least-once on write and exactly-once in effect.
+
+The version key is `source_updated`, the source's own change time
+(`GewijzigdOp` in OData, `tk:bijgewerkt` in the feed). The API timestamps
+cannot order versions across the two APIs: for the same change, the feed's
+Atom `updated` and OData's `ApiGewijzigdOp` differ by about a second. The feed
+gives `tk:bijgewerkt` in Amsterdam local time without an offset; the loader
+converts it to UTC, after which it equals OData's `GewijzigdOp`. When a
+snapshot row and a feed row have the same version, the feed row wins, because
+it carries a `resume_token`. A test on live data found feed and OData rows
+equal, field for field, for every entity.
 
 Raw tables are **typed and allowlisted**, not JSON blobs. Every row carries
 `id`, `deleted`, `api_updated`, `source_updated`, `resume_token` (null for
@@ -164,7 +177,7 @@ ids:
 select *
 from {{ source('raw', 'stemming_changes') }}
 qualify row_number() over (
-    partition by id order by api_updated desc, resume_token desc nulls last
+    partition by id order by source_updated desc, resume_token desc nulls last
 ) = 1
 ```
 
@@ -186,8 +199,8 @@ Membership has two timelines, and the model keeps both:
 
 - **Valid time:** when a member actually sat in a party, from the source's
   `Van` and `TotEnMet`.
-- **Record time:** when the warehouse learned about it, from `api_updated` in
-  the change log.
+- **Record time:** when the source recorded the change, from `source_updated`
+  in the change log.
 
 Keeping both answers "which party was this member in on the day of the vote"
 and "what did the warehouse believe on a given date".
@@ -243,7 +256,7 @@ in the other repositories.
 | Milestone | Scope |
 | --- | --- |
 | M0 | Repository, CI, the feed parser and its tests, this document. Done. |
-| M1 | Loader: bootstrap, daily change run, checkpoints, storage ledger, renewal, recovery test. Terraform for the datasets and the identity provider. |
+| M1 | Loader: bootstrap, daily change run, checkpoints, storage ledger, renewal, recovery test. Terraform for the datasets and the identity provider. Done. |
 | M2 | dbt staging, dimensions, facts, contracts and tests on DuckDB and BigQuery. |
 | M3 | Marts, the GitHub Pages report, README, and making the repository public. |
 | M4 (optional) | Documents: text extraction, local embeddings, similar-motion search with a retrieval test set. |
@@ -268,9 +281,12 @@ in the other repositories.
 - **Storage quota wording.** If the quota counts only data at rest, the ledger
   is merely conservative. If it counts every write, the ledger is what keeps
   the project alive. The design works under both readings.
-- **Scope filter in OData.** Filtering votes by decision date needs a filter
-  across `Besluit`, `Agendapunt` and `Activiteit`. Nested filters are not yet
-  tested; the fallback is to snapshot by `GewijzigdOp` and filter in staging.
+- **Scope filter in OData (resolved).** Nested filters work
+  (`Besluit/Agendapunt/Activiteit/Datum ge …`), and so do `any()` filters. Cases
+  use `GestartOp ge … or Besluit/any(…)`, which keeps the 5,228 cases opened
+  before the scope start but decided inside it. The feed cannot be filtered by
+  date, so it also brings changes to out-of-scope entities; staging filters
+  those out.
 - **Roll-call coverage.** Individual votes exist only for roll-call decisions,
   so `fct_member_vote` is sparse by nature and the report says so.
 - **Party splits and renames.** Handled through `dim_party` active dates; the

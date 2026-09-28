@@ -24,6 +24,7 @@ class Change:
     source_updated: str | None
     deleted: bool
     fields: dict[str, str | None]
+    refs: dict[str, list[str]]
 
 
 @dataclass(frozen=True)
@@ -44,17 +45,20 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _fields(body: ET.Element) -> dict[str, str | None]:
+def _fields(body: ET.Element) -> tuple[dict[str, str | None], dict[str, list[str]]]:
+    # A reference element repeats once per linked entity (a decision linked to
+    # two cases has two <zaak ref="…"/>), so references are always lists.
     fields: dict[str, str | None] = {}
+    refs: dict[str, list[str]] = {}
     for child in body:
         name = _local(child.tag)
         if child.get("ref") is not None:
-            fields[f"{name}_id"] = child.get("ref")
+            refs.setdefault(name, []).append(child.get("ref"))
         elif child.get(XSI_NIL) == "true":
             fields[name] = None
         else:
             fields[name] = child.text
-    return fields
+    return fields, refs
 
 
 def parse_page(xml: bytes | str) -> Page:
@@ -66,6 +70,7 @@ def parse_page(xml: bytes | str) -> Page:
         token = _skiptoken(entry)
         if token is None:
             raise ValueError(f"entry {body.get('id')} has no next link to resume from")
+        fields, refs = ({}, {}) if deleted else _fields(body)
         changes.append(
             Change(
                 entity=_local(body.tag),
@@ -74,7 +79,8 @@ def parse_page(xml: bytes | str) -> Page:
                 api_updated=entry.findtext(f"{ATOM}updated"),
                 source_updated=body.get(f"{TK}bijgewerkt"),
                 deleted=deleted,
-                fields={} if deleted else _fields(body),
+                fields=fields,
+                refs=refs,
             )
         )
     return Page(changes=changes, next_token=_skiptoken(root))

@@ -9,6 +9,7 @@ description = "Dutch parliament votes and decisions: Tweede Kamer change feed, B
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31",
+    "duckdb>=1.1",
 ]
 
 [project.optional-dependencies]

@@ -42,3 +42,15 @@ jobs:
 
       - name: Unit tests
         run: python -m pytest -q
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+      - run: terraform fmt -check
+      - run: terraform init -backend=false
+      - run: terraform validate

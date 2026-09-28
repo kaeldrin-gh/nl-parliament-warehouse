@@ -14,3 +14,9 @@ exports/
 gha-creds-*.json
 CLAUDE.md
 .DS_Store
+
+# Terraform: local state (see terraform/versions.tf)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/tfplan
