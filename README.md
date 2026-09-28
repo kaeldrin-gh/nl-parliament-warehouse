@@ -47,6 +47,9 @@ flowchart TB
     M --> P["GitHub Pages: report and dbt docs"]
     A["GitHub Actions, daily"] -. runs .-> L
     T["Terraform"] -. "datasets, keyless access" .-> R
+    classDef store fill:#1f5fae,stroke:#3987e5,color:#ffffff
+    class R,M store
+    style source fill:none,stroke:#898781
 ```
 
 - **Change capture from a public source.** The Tweede Kamer SyncFeed republishes
