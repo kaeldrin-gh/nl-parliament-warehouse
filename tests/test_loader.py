@@ -240,3 +240,17 @@ def test_long_runs_checkpoint_after_every_batch():
         )
     ]
     assert tokens == [350, 600, 700]
+
+
+def test_tables_written_by_dbt_count_towards_the_budget():
+    loader, sink = make(FakeApi(), limit_bytes=1000)
+
+    loader.record_tables("dbt", {"marts.mart_overview": 400, "marts.mart_party_agreement": 700})
+
+    rows = sink.query(f"select step, table_name, bytes_written from raw.{LEDGER} order by 2")
+    assert rows == [
+        ("dbt", "marts.mart_overview", 400),
+        ("dbt", "marts.mart_party_agreement", 700),
+    ]
+    with pytest.raises(BudgetExceeded):
+        loader.check_budget()

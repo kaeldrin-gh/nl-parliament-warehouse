@@ -69,6 +69,10 @@ def main(argv=None) -> None:
             cmd.add_argument("--force", action="store_true", help="reload bootstrapped entities")
     sub.add_parser("renew", help="re-create raw tables before the 60-day expiry")
     sub.add_parser("load-sample", help="load the committed one-day sample into DuckDB")
+    sub.add_parser("check-budget", help="fail if the storage ledger reached its limit")
+    record = sub.add_parser("record-tables", help="log the stored size of a dataset's tables")
+    record.add_argument("dataset", help="BigQuery dataset, for example marts")
+    record.add_argument("--step", default="dbt")
     args = parser.parse_args(argv)
 
     if args.command == "load-sample":
@@ -89,6 +93,13 @@ def main(argv=None) -> None:
         loader.run_changes(_entities(args.entity))
     elif args.command == "renew":
         loader.renew()
+    elif args.command == "check-budget":
+        print(f"{loader.check_budget():,} bytes written so far, limit {loader.limit:,}")
+    elif args.command == "record-tables":
+        if not isinstance(loader.sink, BigQuerySink):
+            sys.exit("record-tables reads BigQuery table sizes; set WAREHOUSE=bigquery")
+        total = loader.record_tables(args.step, loader.sink.table_sizes(args.dataset))
+        print(f"{args.dataset}: {total:,} bytes logged")
     elif args.command == "status":
         print(_markdown(loader.status(_entities(args.entity)), loader.written_bytes()))
 

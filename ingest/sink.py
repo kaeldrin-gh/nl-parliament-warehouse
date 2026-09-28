@@ -176,3 +176,13 @@ class BigQuerySink:
 
     def query(self, sql: str) -> list[tuple]:
         return [tuple(row.values()) for row in self.client.query(sql).result()]
+
+    def table_sizes(self, dataset: str) -> dict[str, int]:
+        """Stored bytes of each table (not view) in another dataset of the project."""
+        sizes = {}
+        for item in self.client.list_tables(f"{self.project}.{dataset}"):
+            if item.table_type == "TABLE":
+                sizes[f"{dataset}.{item.table_id}"] = int(
+                    self.client.get_table(item.reference).num_bytes or 0
+                )
+        return sizes

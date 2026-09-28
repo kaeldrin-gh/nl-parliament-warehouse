@@ -1,8 +1,8 @@
 name: ingest
 
 # Daily: read the change feed from each checkpoint into BigQuery, renew raw
-# tables that near the sandbox's 60-day expiry, then rebuild and test the dbt
-# views on the full data.
+# tables that near the sandbox's 60-day expiry, rebuild and test the dbt model
+# on the full data, then publish the report and dbt docs to GitHub Pages.
 on:
   schedule:
     - cron: "30 4 * * *"
@@ -49,8 +49,25 @@ jobs:
       - name: Renew tables near expiry
         run: python -m ingest.cli renew
 
-      - name: dbt build on BigQuery (views only, nothing stored)
+      - name: Check the storage budget before dbt writes the marts
+        run: python -m ingest.cli check-budget
+
+      - name: dbt build on BigQuery
         run: dbt build --project-dir dbt --profiles-dir dbt
+
+      - name: Log the marts' stored size in the storage ledger
+        run: python -m ingest.cli record-tables marts --step dbt
+
+      - name: Build the report and the dbt docs
+        run: |
+          python -m report.build --out site
+          dbt docs generate --project-dir dbt --profiles-dir dbt
+          mkdir -p site/docs
+          cp dbt/target/index.html dbt/target/manifest.json dbt/target/catalog.json site/docs/
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
 
       - name: Status
         if: always()
@@ -75,3 +92,16 @@ jobs:
             --label ingest-failure \
             --title "Scheduled ingest failed ($(date -u +%Y-%m-%d))" \
             --body "The scheduled ingest run failed. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID - see docs/operations.md."
+
+  deploy:
+    needs: ingest
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

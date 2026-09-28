@@ -19,7 +19,7 @@ bigquery = ["google-cloud-bigquery>=3.25", "dbt-bigquery>=1.9"]
 test = ["pytest>=8.0"]
 
 [tool.setuptools]
-packages = ["ingest"]
+packages = ["ingest", "report"]
 
 [tool.ruff]
 line-length = 100
@@ -27,3 +27,6 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"report/build.py" = ["E501"]  # the HTML page template

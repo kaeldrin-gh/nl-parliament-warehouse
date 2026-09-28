@@ -16,6 +16,9 @@ python -m ingest.cli bootstrap --entity Persoon  # one entity (repeatable)
 python -m ingest.cli changes                     # read the feed from each checkpoint
 python -m ingest.cli renew                       # re-create tables before the 60-day expiry
 python -m ingest.cli status                      # rows, checkpoints, table age, bytes written
+python -m ingest.cli check-budget                # fail if the storage ledger reached its limit
+python -m ingest.cli record-tables marts         # log the marts' stored size (BigQuery)
+python -m report.build --out site                # the report, from the marts
 ```
 
 For BigQuery from a workstation:
@@ -75,8 +78,9 @@ terraform apply
 
 ## The daily run
 
-The `ingest` workflow runs at 04:30 UTC: `changes`, `renew`, `dbt build` on
-BigQuery, then `status` into the run summary. A failed run opens one GitHub
+The `ingest` workflow runs at 04:30 UTC: `changes`, `renew`, `check-budget`,
+`dbt build` on BigQuery, `record-tables marts`, the report and dbt docs, then
+`status` into the run summary. A second job deploys the site to GitHub Pages. A failed run opens one GitHub
 issue labeled `ingest-failure`; later failures stay red without opening
 duplicates.
 

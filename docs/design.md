@@ -1,7 +1,8 @@
 # Design: nl-parliament-warehouse
 
-Status: 28 September 2026. Milestones M0 (repository setup), M1 (the loader
-and its infrastructure) and M2 (the dbt model) are done; M3 onward is planned.
+Status: 28 September 2026. Milestones M0 to M3 are done: the loader and its
+infrastructure, the dbt model, the marts and the public report. M4 and M5 are
+optional.
 
 ## Objective
 
@@ -157,8 +158,8 @@ sandbox cannot update rows. The current checkpoint is the newest row.
 | --- | --- |
 | No DML | Raw is append-only. History and "current version" are computed with window functions over the change log, not with dbt snapshots or `MERGE`. |
 | 60-day expiry | A renewal step re-creates any raw table older than 45 days with `CREATE OR REPLACE TABLE t AS SELECT * FROM t`. Marts are rebuilt every run, so they never age. |
-| 10 GiB lifetime storage | Staging and core models are views, which store nothing. Only marts (M3) will be tables, and each is small. Raw is lean: the bootstrap wrote 314 MB for 1.2 million rows (3% of the quota). |
-| 1 TiB of queries a month | A full `dbt build` on BigQuery (the models plus 110 tests) scans 4.3 GB in 161 queries; run daily, that is about 130 GB a month. |
+| 10 GiB lifetime storage | Staging and core models are views, which store nothing. Only the marts are tables: about 0.5 MB, rebuilt daily. Raw is lean: the bootstrap wrote 314 MB for 1.2 million rows (3% of the quota). |
+| 1 TiB of queries a month | A full `dbt build` on BigQuery (27 models, 104 data tests and a unit test) scans 4.3 GB in about 160 queries; run daily, that is about 130 GB a month. |
 | Quota visibility | Every job's written bytes are appended to `raw.storage_ledger`. Before writing, the loader sums the ledger and refuses to write above 8 GiB, leaving room for a controlled wind-down. |
 
 If the pipeline stops for more than 60 days, raw expires. The source is the
@@ -222,13 +223,20 @@ and "what did the warehouse believe on a given date".
 
 ### Marts
 
-Each mart states its definition in the model's YAML and on the report page:
+The marts are the only tables dbt stores (about 0.5 MB, rebuilt daily and
+logged in the storage ledger). They hold counts, not shares, so months add up
+to terms; the report computes the shares. Parties are keyed by abbreviation,
+which merges the two 50PLUS records ([data-quality.md](data-quality.md), DQ-1).
+Each mart states its definition in its YAML and on the report page:
 
-- `mart_party_agreement`: for each pair of parties and month, the share of
-  decisions where both took part and voted the same way.
-- `mart_case_outcomes`: accepted and rejected motions and amendments by type,
-  month and submitting party.
-- `mart_vote_participation`: the share of decisions each party took part in.
+- `mart_party_agreement`: for each pair of parties and month, the decisions on
+  which both voted for or against, and on how many they voted the same way.
+- `mart_party_participation`: for each party and month, decisions put to a
+  party vote and how the party took part.
+- `mart_outcomes_monthly`: voted decisions by month and case type, accepted or
+  rejected.
+- `mart_outcomes_by_submitter`: the same by the party of the case's submitter.
+- `mart_overview`: one row of headline counts for the report and README.
 
 ## Governance
 
@@ -239,9 +247,10 @@ Each mart states its definition in the model's YAML and on the report page:
   details (`PersoonGeschenk`, `PersoonReis`, `PersoonNevenfunctie`,
   `PersoonContactinformatie`). A unit test fails if a landing schema contains a
   column outside its allowlist.
-- **Contracts and tests.** Every core model is contract-enforced; 110 checks
-  cover keys, relationships, accepted values, House-size limits (at most
-  150 seats behind a decision's votes) and the change-log rules. Source
+- **Contracts and tests.** Every core model and mart is contract-enforced. 104
+  data tests and a unit test cover keys, relationships, accepted values,
+  House-size limits (at most 150 seats behind a decision's votes) and the
+  change-log rules. Source
   problems that the data really has warn instead of failing, and each is
   written up in [data-quality.md](data-quality.md).
 - **Lineage and docs.** dbt docs with column descriptions, published to GitHub
@@ -253,8 +262,8 @@ Each mart states its definition in the model's YAML and on the report page:
 
 ## Orchestration
 
-A daily GitHub Actions workflow runs ingest, renewal, `dbt build`, and the
-report. The job is a short sequential chain, so a scheduler service would add
+A daily GitHub Actions workflow runs ingest, renewal, a storage-budget check,
+`dbt build`, and publishes the report and dbt docs to GitHub Pages. The job is a short sequential chain, so a scheduler service would add
 cost without adding capability; Airflow is shown in de-energy-streaming. A
 failed run opens one GitHub issue, deduplicated while it is open, the same as
 in the other repositories.
@@ -277,7 +286,7 @@ in the other repositories.
 | M0 | Repository, CI, the feed parser and its tests, this document. Done. |
 | M1 | Loader: bootstrap, daily change run, checkpoints, storage ledger, renewal, recovery test. Terraform for the datasets and the identity provider. Done. |
 | M2 | dbt staging, dimensions, facts, contracts and tests on DuckDB and BigQuery. Done. |
-| M3 | Marts, the GitHub Pages report, README, and making the repository public. |
+| M3 | Marts, the GitHub Pages report, README, and making the repository public. Done. |
 | M4 (optional) | Documents: text extraction, local embeddings, similar-motion search with a retrieval test set. |
 | M5 (optional) | Bundestag DIP API as a German counterpart. |
 

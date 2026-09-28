@@ -102,6 +102,18 @@ class Loader:
         }
         self.sink.append(LEDGER, LEDGER_COLUMNS, [row])
 
+    def check_budget(self) -> int:
+        """Raise BudgetExceeded at the limit; otherwise return the bytes written so far."""
+        self._guard()
+        return self.written_bytes()
+
+    def record_tables(self, step: str, sizes: dict[str, int]) -> int:
+        """Log tables another tool wrote (dbt marts), so the ledger covers every write."""
+        self._ensure_system_tables()
+        for table, size in sorted(sizes.items()):
+            self._record(step, table, size)
+        return sum(sizes.values())
+
     def checkpoints(self) -> dict[str, int]:
         if not self.sink.table_exists(CHECKPOINTS):
             return {}

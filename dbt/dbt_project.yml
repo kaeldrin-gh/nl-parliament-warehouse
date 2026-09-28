@@ -11,8 +11,9 @@ vars:
   # The House elected on 17 March 2021 took office on 31 March 2021.
   scope_start: "2021-03-31"
 
-# Everything here is a view: the BigQuery sandbox grants 10 GiB of lifetime
-# storage, and views store nothing (docs/design.md, Staying inside the sandbox).
+# Staging and core are views, which store nothing: the BigQuery sandbox grants
+# 10 GiB of lifetime storage. Only the small marts behind the report are tables
+# (docs/design.md, Staying inside the sandbox).
 models:
   nl_parliament:
     staging:
@@ -21,3 +22,6 @@ models:
     core:
       +schema: core
       +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table

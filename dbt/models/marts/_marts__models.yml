@@ -1,0 +1,124 @@
+version: 2
+
+# Marts are tables (the only ones dbt stores) and hold counts, not shares, so
+# they add up across months and terms; the report computes the shares.
+
+models:
+  - name: mart_party_agreement
+    description: >
+      For each pair of parties (party_a before party_b alphabetically) and month:
+      the decisions on which both voted for or against, and on how many of those
+      they voted the same way. Parties are keyed by abbreviation (DQ-1).
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: term_id
+        data_type: int64
+        tests: [not_null]
+      - name: month_start
+        data_type: date
+        tests: [not_null]
+      - name: party_a
+        data_type: string
+        tests: [not_null]
+      - name: party_b
+        data_type: string
+        tests: [not_null]
+      - name: decisions_both_voted
+        data_type: int64
+        tests: [not_null]
+      - name: decisions_same_vote
+        description: "At most decisions_both_voted."
+        data_type: int64
+        tests: [not_null]
+
+  - name: mart_party_participation
+    description: "For each party and month: decisions put to a party vote and how the party took part."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: term_id
+        data_type: int64
+        tests: [not_null]
+      - name: month_start
+        data_type: date
+        tests: [not_null]
+      - name: party
+        data_type: string
+        tests: [not_null]
+      - name: decisions
+        data_type: int64
+      - name: took_part
+        description: "Votes for or against."
+        data_type: int64
+      - name: not_voted
+        description: "Recorded as not taking part (niet deelgenomen)."
+        data_type: int64
+      - name: declared_mistakes
+        description: "Votes the party later declared a mistake (vergissing)."
+        data_type: int64
+      - name: seats
+        description: "Most seats the party held in the month."
+        data_type: int64
+
+  - name: mart_outcomes_monthly
+    description: "Voted decisions by month and case type, accepted or rejected."
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: term_id
+        data_type: int64
+      - name: month_start
+        data_type: date
+        tests: [not_null]
+      - name: case_type
+        data_type: string
+        tests: [not_null]
+      - name: accepted
+        data_type: int64
+      - name: rejected
+        data_type: int64
+
+  - name: mart_outcomes_by_submitter
+    description: >
+      Voted decisions by term, the party of the case's submitter and case type.
+      A case with submitters from two parties counts for both.
+    config:
+      contract: {enforced: true}
+    columns:
+      - name: term_id
+        data_type: int64
+      - name: submitter_party
+        data_type: string
+        tests: [not_null]
+      - name: case_type
+        data_type: string
+        tests: [not_null]
+      - name: accepted
+        data_type: int64
+      - name: rejected
+        data_type: int64
+
+  - name: mart_overview
+    description: "One row of headline counts for the report and the README."
+    config:
+      contract: {enforced: true}
+    tests:
+      - single_row
+    columns:
+      - name: decisions_voted
+        description: "Decisions with at least one party vote."
+        data_type: int64
+      - name: party_votes
+        data_type: int64
+      - name: roll_call_decisions
+        data_type: int64
+      - name: member_votes
+        data_type: int64
+      - name: first_vote_on
+        data_type: date
+      - name: last_vote_on
+        data_type: date
+      - name: latest_source_change_on
+        description: "Day of the newest vote change the source published."
+        data_type: date

@@ -66,6 +66,9 @@ jobs:
       - name: dbt build (models, contracts, data tests, unit tests)
         run: dbt build --project-dir dbt --profiles-dir dbt
 
+      - name: Build the report from the sample marts
+        run: python -m report.build --out /tmp/site
+
   terraform:
     runs-on: ubuntu-latest
     defaults:

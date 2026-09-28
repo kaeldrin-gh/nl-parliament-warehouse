@@ -27,11 +27,13 @@ resource "google_bigquery_dataset" "raw" {
   depends_on = [google_project_service.apis]
 }
 
-# dbt writes only views here (docs/design.md, Staying inside the sandbox).
+# dbt writes views to staging and core, and small tables to marts
+# (docs/design.md, Staying inside the sandbox).
 resource "google_bigquery_dataset" "modeled" {
   for_each = {
     staging = "dbt staging views: the latest version of each entity, in English."
     core    = "dbt dimensions, bridges and facts (views) with enforced contracts."
+    marts   = "dbt marts: small aggregate tables behind the report, rebuilt daily."
   }
 
   dataset_id                      = each.key
