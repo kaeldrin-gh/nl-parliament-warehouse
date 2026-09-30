@@ -23,8 +23,9 @@ votes.
   on the day, from `bridge_party_membership`, so roll-call analysis can use
   the party as it existed.
 - `assert_votes_recorded_for_active_parties` warns on every vote recorded for
-  a party record that was no longer active. Today it lists exactly these
-  4,338 votes; a new party with the same problem would show up here too.
+  a party record that was no longer active. It lists only 50PLUS votes and
+  grows with each new one (4,501 on 30 September 2026); a new party with the
+  same problem would show up here too.
 
 The marts key parties by abbreviation (`int_party_votes_keyed`), so the two
 records count as one party, and the report says so in its notes.

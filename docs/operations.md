@@ -97,7 +97,7 @@ schedule stops, re-enable it in the Actions tab and follow the
 | `BudgetExceeded` | The storage ledger reached `STORAGE_LIMIT_BYTES` (8 GiB by default) of the sandbox's 10 GiB lifetime quota. | Stop scheduled runs. Check `storage_ledger` for the step that wrote most. Raising the limit uses the last 2 GiB of headroom. |
 | `gave up after 6 retries (HTTP 429)` | The Tweede Kamer API throttled this IP address. | Rerun later; the checkpoint has not moved, so nothing is lost. |
 | `403 … getAccessToken denied` in the workflow | New IAM bindings take a few minutes to apply, or the provider does not match the repository name. | Wait five minutes and rerun; check `github_repository` in `terraform/variables.tf`. |
-| dbt warns `assert_votes_recorded_for_active_parties` or `assert_member_votes_with_a_seat` | Known source problems, see [data-quality.md](data-quality.md). | Nothing, unless the count grows or a new party appears in the warning. |
+| dbt warns `assert_votes_recorded_for_active_parties` or `assert_member_votes_with_a_seat` | Known source problems, see [data-quality.md](data-quality.md). The first grows with every new 50PLUS vote. | Nothing, unless a party other than 50PLUS appears in the first, or the second grows. |
 | `Billing has not been enabled … DML queries are not allowed` | Code tried `INSERT`, `UPDATE` or `MERGE`. | The sandbox refuses DML; use a load job or `CREATE OR REPLACE TABLE … AS SELECT`. |
 
 ## Checking the raw layer
