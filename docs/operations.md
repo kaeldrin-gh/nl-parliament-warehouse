@@ -98,6 +98,7 @@ schedule stops, re-enable it in the Actions tab and follow the
 | `gave up after 6 retries (HTTP 429)` | The Tweede Kamer API throttled this IP address. | Rerun later; the checkpoint has not moved, so nothing is lost. |
 | `403 … getAccessToken denied` in the workflow | New IAM bindings take a few minutes to apply, or the provider does not match the repository name. | Wait five minutes and rerun; check `github_repository` in `terraform/variables.tf`. |
 | dbt warns `assert_votes_recorded_for_active_parties` or `assert_member_votes_with_a_seat` | Known source problems, see [data-quality.md](data-quality.md). The first grows with every new 50PLUS vote. | Nothing, unless a party other than 50PLUS appears in the first, or the second grows. |
+| dbt warns `assert_case_actors_with_a_case` | A case's submitter arrived without the case: the case was deleted, or it was created between the `Zaak` and `ZaakActor` reads of one run. `bridge_case_submitter` leaves these rows out. | Nothing, if the count drops on the next run. If it stays, compare `raw.zaak_actor_changes` with `raw.zaak_changes` for the listed `case_id` values. |
 | `Billing has not been enabled … DML queries are not allowed` | Code tried `INSERT`, `UPDATE` or `MERGE`. | The sandbox refuses DML; use a load job or `CREATE OR REPLACE TABLE … AS SELECT`. |
 
 ## Checking the raw layer
